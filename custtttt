@@ -1,0 +1,312 @@
+import { useRouter } from "next/router";
+import { useState, useEffect, useRef } from "react";
+import JSZip from "jszip";
+import Payment from "./payment"; // Import the Payment component
+import { v4 as uuidv4 } from "uuid";
+import { supabase } from "../supabaseClient"; // Import Supabase client
+
+const clothing = ["/Brett 2.0 Jersey.png", "/$AYB Base Shirt.png", "/Base Chad Tank.png", "/Goldfish On Base Shirt.png", "/Plebs Merch shirt.png", "/Copeville merch shirt.png"];
+const eyes = ["/Base Laser Eyes.png", "/Meta eyes.png", "/$WEEP eyes.png", "/Plebs 3D Glasses.png"];
+const hat = ["/Western Plebs Hat.png", "/Blue Base Beanie.png"];
+
+const Customize: React.FC = () => {
+  const router = useRouter();
+  const { id, name, image } = router.query;
+
+  const [nftName, setNftName] = useState<string | null>(name as string || null);
+  const [nftImage, setNftImage] = useState<string | null>(image as string || null);
+
+  const [clothingItem, setClothingItem] = useState<string>("");
+  const [eyesItem, setEyesItem] = useState<string>("");
+  const [hatItem, setHatItem] = useState<string>("");
+
+  const [showClothing, setShowClothing] = useState(false);
+  const [showEyes, setShowEyes] = useState(false);
+  const [showHat, setShowHat] = useState(false);
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false); // Track modal visibility
+  const [paymentSuccessful, setPaymentSuccessful] = useState(false); // Track payment success
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const applyCustomization = () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    if (ctx) {
+      const loadImage = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous"; // Enable cross-origin
+          img.onload = () => resolve(img);
+          img.onerror = (err) => reject(err);
+          img.src = src;
+        });
+
+      const drawLayers = async () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (nftImage) {
+          const nftImg = await loadImage(nftImage);
+          ctx.drawImage(nftImg, 0, 0, canvas.width, canvas.height);
+        }
+
+        if (clothingItem) {
+          const clothingImage = await loadImage(clothingItem);
+          ctx.drawImage(clothingImage, 0, 0, canvas.width, canvas.height);
+        }
+
+        if (eyesItem) {
+          const eyesImage = await loadImage(eyesItem);
+          ctx.drawImage(eyesImage, 0, 0, canvas.width, canvas.height);
+        }
+
+        if (hatItem) {
+          const hatImage = await loadImage(hatItem);
+          ctx.drawImage(hatImage, 0, 0, canvas.width, canvas.height);
+        }
+      };
+
+      drawLayers();
+    }
+  };
+
+  useEffect(() => {
+    applyCustomization();
+  }, [clothingItem, eyesItem, hatItem, nftImage]);
+
+  const generateMetadata = () => {
+    return {
+      id,
+      name: nftName,
+      traits: {
+        clothing: clothingItem,
+        eyes: eyesItem,
+        hat: hatItem,
+      },
+    };
+  };
+
+  const sanitizeFileName = (fileName: string): string => {
+    return fileName.replace(/[^a-zA-Z0-9._-]/g, "_"); // Replace invalid characters with '_'
+  };
+
+  const handleUploadToSupabase = async (zipBlob: Blob, fileName: string) => {
+    try {
+      // Sanitize the file name
+      const sanitizedFileName = sanitizeFileName(
+        `${fileName.replace(/\s+/g, "_")}_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      );
+  
+      console.log("Sanitized file name:", sanitizedFileName);
+  
+      const { data, error } = await supabase.storage
+        .from("nft customization") // Ensure this matches your bucket name
+        .upload(sanitizedFileName, zipBlob, {
+          cacheControl: "3600",
+          upsert: false, // Avoid overwriting
+        });
+  
+      if (error) {
+        throw new Error(error.message);
+      }
+  
+      console.log("File uploaded successfully:", data);
+      alert("Your NFT has been updated. Refresh on OpenSea to see changes");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Error uploading file to Supabase:", errorMessage);
+      alert(`Failed to upload NFT customization: ${errorMessage}`);
+    }
+  };
+  
+  
+  
+  
+
+  const handleDownload = async () => {
+    if (!canvasRef.current) {
+      console.error("Canvas not found");
+      return;
+    }
+
+    try {
+      const zip = new JSZip();
+
+      // Add the image to the ZIP
+      const imageDataURL = canvasRef.current.toDataURL("image/png");
+      const imageData = imageDataURL.split(",")[1]; // Get base64 data
+      zip.file(`${nftName || "NFT"}_${id}.png`, imageData, { base64: true });
+
+      // Generate metadata JSON
+      const metadata = generateMetadata();
+      const jsonString = JSON.stringify(metadata, null, 2); // Pretty-print the JSON
+      zip.file(`${nftName || "Customized_NFT"}_Metadata.json`, jsonString);
+
+      // Generate ZIP file
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+
+      // Upload the ZIP to Supabase
+      const fileName = `${nftName || "Customized_NFT"}_${id}.zip`; // File name for storage
+      await handleUploadToSupabase(zipBlob, fileName);
+    } catch (error) {
+      console.error("Error creating ZIP file:", error);
+      alert("Failed to create ZIP file. Please try again.");
+    }
+  };
+
+  const handleUpdate = async () => {
+    setShowPaymentModal(true); // Show payment modal
+  };
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentModal(false); // Close payment modal
+    await handleDownload(); // Trigger upload to Supabase after successful payment
+    router.push("/"); // Redirect to the home page
+  };
+
+  const handleTraitClick = (
+    trait: string,
+    currentTrait: string,
+    setTrait: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    // Unselect the trait if it is already selected
+    if (trait === currentTrait) {
+      setTrait(""); // Unselect the trait
+    } else {
+      setTrait(trait); // Select the new trait
+    }
+  };
+
+  return (
+    <div style={{ padding: "20px" }}>
+      <button onClick={() => router.push("/")}>Back to Home</button>
+      <h1>{nftName}</h1>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div style={{ background: "white", padding: "20px", borderRadius: "8px" }}>
+            <Payment
+              onPaymentSuccess={handlePaymentSuccess}
+              onClose={() => setShowPaymentModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "20px", marginTop: "20px" }}>
+        {/* Trait Selection Panel */}
+        <div style={{ maxWidth: "400px", overflowY: "auto", height: "80vh" }}>
+          {/* Clothing Section */}
+          <h3 onClick={() => setShowClothing(!showClothing)} style={{ cursor: "pointer" }}>
+            Clothing {showClothing ? "▼" : "▶"}
+          </h3>
+          {showClothing && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              {clothing.map((cl, index) => (
+                <img
+                  key={index}
+                  src={cl}
+                  onClick={() => handleTraitClick(cl, clothingItem, setClothingItem)}
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    cursor: "pointer",
+                    border: clothingItem === cl ? "2px solid royalblue" : "",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* eyes Section */}
+          <h3 onClick={() => setShowEyes(!showEyes)} style={{ cursor: "pointer" }}>
+            Eyes {showEyes ? "▼" : "▶"}
+          </h3>
+          {showEyes && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              {eyes.map((acc, index) => (
+                <img
+                  key={index}
+                  src={acc}
+                  onClick={() => handleTraitClick(acc, eyesItem, setEyesItem)}
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    cursor: "pointer",
+                    border: eyesItem === acc ? "2px solid royalblue" : "",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Hat Section */}
+          <h3 onClick={() => setShowHat(!showHat)} style={{ cursor: "pointer" }}>
+            Hat {showHat ? "▼" : "▶"}
+          </h3>
+          {showHat && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              {hat.map((ht, index) => (
+                <img
+                  key={index}
+                  src={ht}
+                  onClick={() => handleTraitClick(ht, hatItem, setHatItem)}
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    cursor: "pointer",
+                    border: hatItem === ht ? "2px solid royalblue" : "",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Canvas Panel */}
+        <div>
+          <canvas
+            ref={canvasRef}
+            width="500"
+            height="500"
+            style={{ border: "1px solid black" }}
+          ></canvas>
+
+          {/* Update Button */}
+          <button
+            onClick={handleUpdate}
+            style={{
+              marginTop: "10px",
+              padding: "10px",
+              backgroundColor: "blue",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+              borderRadius: "5px",
+            }}
+          >
+            Update
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Customize;

@@ -1,0 +1,14 @@
+.nav_container{
+    display: flex;
+    /* padding: 20px; */
+        justify-content: space-between;
+        width: 97vw;
+}
+
+.backButton{
+    background-image: url(../public/weep.png);
+    width: 88px;
+    height: 25px;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
