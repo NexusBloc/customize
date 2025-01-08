@@ -5,14 +5,21 @@ import emailjs from "emailjs-com"; // Import EmailJS
 import Payment from "./payment";
 import styles from "../styles/customize.module.css";
 import Navigation from "./component/Navigation";
+import CustomAlert from "../pages/component/CustomAlert"; // Import the custom alert
 
-const clothing = ["/Brett 2.0 Jersey.png", "/$AYB Base Shirt.png", "/Base Chad Tank.png", "/Goldfish On Base Shirt.png", "/Plebs Merch shirt.png", "/Copeville merch shirt.png"];
-const eyes = ["/Base Laser Eyes.png", "/Meta eyes.png", "/$WEEP eyes.png", "/Plebs 3D Glasses.png"];
+const service = process.env.NEXT_PUBLIC_SERVICE_ID as string;
+const temp = process.env.NEXT_PUBLIC_TEMPLATE_ID as string;
+const publ = process.env.NEXT_PUBLIC_PUBLICKEY as string;
+
+
+const clothing = ["/Brett 2.0 Jersey.png", "/$AYB Base Shirt.png", "/Base Chad Tank.png", "/Goldfish On Base Shirt.png", "/Plebs Merch shirt.png", "/Copeville Merch Shirt.png"];
+const eyes = ["/Base Laser Eyes.png", "/Meta Eyes.png", "/$WEEP Eyes.png", "/Plebs 3D Glasses.png"];
 const hat = ["/Western Plebs Hat.png", "/Blue Base Beanie.png"];
 
 const Customize: React.FC = () => {
   const router = useRouter();
   const { id, name, image } = router.query;
+  
 
   const [nftName, setNftName] = useState<string | null>(name as string || null);
   const [nftImage, setNftImage] = useState<string | null>(image as string || null);
@@ -114,13 +121,11 @@ const Customize: React.FC = () => {
 
   const sendEmailNotification = async (): Promise<void> => {
     try {
-      // Ensure nftName is passed correctly as a parameter
-      await emailjs.send(
-
-        "service_rpc8mm4", // Replace with your EmailJS Service ID
-        "template_ex4sj7n", // Replace with your EmailJS Template ID
-        { nftName }, // Replace with template variables
-        "B84Hw7Oa7mhK6uxSu" // Replace with your EmailJS Public Key
+      const response = await emailjs.send(
+        service,
+        temp,
+        { nftName }, // Template variables
+        publ
       );
       console.log("Notification sent successfully.");
     } catch (error) {
@@ -162,6 +167,8 @@ const Customize: React.FC = () => {
       alert("Failed to upload files  Please try again.");
     }
   };
+
+  
 
   const handlePaymentSuccess = async () => {
     setShowPaymentModal(false); // Close payment modal

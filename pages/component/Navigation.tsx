@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRouter } from "next/router";
 import styles from '../../styles/navigation.module.css'
-import {ConnectWallet } from "@thirdweb-dev/react";
+import { ConnectWallet } from "@thirdweb-dev/react";
 
 const Navigation = () => {
     const router = useRouter();
